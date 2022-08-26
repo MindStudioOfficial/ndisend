@@ -25,17 +25,32 @@ class Main extends StatefulWidget {
 }
 
 class _MainState extends State<Main> {
+  // the key used by the Repaint Boundary
   final bKey = GlobalKey();
+
+  // the Image overridden by the capture function
   ui.Image? img;
+
+  // the frame class creating the struct for sending
   late NDIFrame frame;
+
+  // where the pixels are stored
   late Pointer<Uint8> pData;
+
+  // the size of the pixelbuffer in bytes
   int maxLen = 1920 * 1080 * 4;
+
+  // used to periodically call the capture function
   Timer? timer;
 
   Future<void> capture() async {
+    // get the RepaintBoundary Widget
     final boundary = bKey.currentContext?.findRenderObject() as RenderRepaintBoundary;
+    // get the ui.Image of that widget
     img = await boundary.toImage();
+    // get the pixels as RGBA bytes
     final bytes = await img!.toByteData(format: ui.ImageByteFormat.rawRgba);
+    // view the pointer as a Uint8List and copy the image bytes to that list effectively copying to the pointer array
     pData.asTypedList(maxLen).setRange(
           0,
           bytes!.lengthInBytes < maxLen ? bytes.lengthInBytes : maxLen,
@@ -46,7 +61,9 @@ class _MainState extends State<Main> {
   @override
   void initState() {
     super.initState();
+    // allocate space for the pixel buffer
     pData = calloc.call<Uint8>(maxLen);
+    // create a new frame internally creating the NDIlib struct
     frame = NDIFrame(
       width: 1920,
       height: 1080,
@@ -57,7 +74,10 @@ class _MainState extends State<Main> {
       frameRateN: 30000,
       frameRateD: 1000,
     );
+
+    // start the sending process
     ndiSend.sendFrames(frame);
+    // wait for a bit and then update the frame that needs to be sended
     Future.delayed(const Duration(milliseconds: 10), () {
       timer = Timer.periodic(
           Duration(
@@ -73,9 +93,11 @@ class _MainState extends State<Main> {
     super.dispose();
     timer?.cancel();
     ndiSend.stopSendFrames();
-    calloc.free(pData);
+    frame.destroy();
+    //calloc.free(pData);
   }
 
+  // restart the sending process on hot reload
   @override
   void reassemble() {
     super.reassemble();
@@ -120,6 +142,7 @@ class _MainState extends State<Main> {
                       height: 1080,
                       color: Colors.black,
                     ),
+                    // The widget that gets captured
                     RepaintBoundary(
                       key: bKey,
                       child: Container(

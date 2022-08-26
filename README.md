@@ -1,6 +1,6 @@
 # ndisend
 
-A new Flutter project.
+A test/example project showing how to use the NDI SDK to send parts of the Flutter UI as a NDI Stream with alpha channel.
 
 ## Getting Started
 

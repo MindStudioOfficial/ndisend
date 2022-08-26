@@ -138,6 +138,7 @@ class NDIFrame {
     required this.format,
     required this.bytesPerPixel,
   }) {
+    // create the NDIlib struct
     Pointer<NDIlib_video_frame_v2_t> _pFrame = ffi.calloc.call<NDIlib_video_frame_v2_t>(1);
     _pFrame.ref.FourCC = fourCC;
     _pFrame.ref.xres = width;

@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:ndisend/ndi_ffi_bindings.dart';
 
 import 'package:ndisend/ndisend.dart';
+import 'package:ndisend/off_screen_renderer.dart';
 
 void main() {
   runApp(const Main());
@@ -62,6 +63,8 @@ class _MainState extends State<Main> {
   late NDIFrame offScreenFrame;
   late ffi.Pointer<ffi.Uint8> offScreenData;
 
+  OffScreenRenderer? offScreenRenderer;
+
   @override
   void initState() {
     super.initState();
@@ -107,6 +110,14 @@ class _MainState extends State<Main> {
     );
 
     ndiSend2.sendFrames(offScreenFrame);
+
+    WidgetsFlutterBinding.ensureInitialized().addPostFrameCallback((_) {
+      offScreenRenderer = OffScreenRenderer(
+        context,
+        imageSize: const Size(1920, 1080),
+        logicalSize: const Size(1920, 1080),
+      );
+    });
   }
 
   @override
@@ -151,6 +162,8 @@ class _MainState extends State<Main> {
   }
 
   Offset pos = Offset.zero;
+
+  int i = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -217,24 +230,39 @@ class _MainState extends State<Main> {
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () async {
+            i++;
             final sw = Stopwatch()..start();
-            final data = await createImageFromWidget(
-              const SizedBox(
+            final buf = await offScreenRenderer?.renderWidget(
+              Container(
                 width: 1920,
                 height: 1080,
-                child: Placeholder(),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      HSVColor.fromAHSV(1, (i % 360).toDouble(), 1, 1)
+                          .toColor(),
+                      HSVColor.fromAHSV(1, ((i + 180) % 360).toDouble(), 1, 1)
+                          .toColor(),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    'OffScreen Widget',
+                    style: TextTheme.of(context)
+                        .displayLarge
+                        ?.copyWith(color: Colors.white),
+                  ),
+                ),
               ),
-              context,
-              logicalSize: const Size(1920, 1080),
-              imageSize: const Size(1920, 1080),
             );
 
-            if (data == null) {
+            if (buf == null) {
               print('Failed to create image from widget');
               return;
             }
-
-            final buf = data.asUint8List();
 
             offScreenData.asTypedList(maxLen).setRange(0, buf.length, buf);
 
@@ -249,70 +277,4 @@ class _MainState extends State<Main> {
       ),
     );
   }
-}
-
-Future<ByteBuffer?> createImageFromWidget(
-  Widget widget,
-  BuildContext context, {
-  Duration? wait,
-  Size? logicalSize,
-  Size? imageSize,
-}) async {
-  final sw = Stopwatch()..start();
-  final repaintBoundary = RenderRepaintBoundary();
-
-  logicalSize ??=
-      View.of(context).physicalSize / View.of(context).devicePixelRatio;
-
-  imageSize ??= View.of(context).physicalSize;
-
-  assert(
-    logicalSize.aspectRatio == imageSize.aspectRatio,
-    'The logical size and the image size must have the same aspect ratio.',
-  );
-
-  final renderView = RenderView(
-    child: RenderPositionedBox(
-      child: repaintBoundary,
-    ),
-    configuration: ViewConfiguration(
-      logicalConstraints: BoxConstraints.tight(logicalSize),
-    ),
-    view: View.of(context),
-  );
-
-  final pipelineOwner = PipelineOwner();
-  final buildOwner = BuildOwner(focusManager: FocusManager());
-
-  pipelineOwner.rootNode = renderView;
-  renderView.prepareInitialFrame();
-
-  final rootElement = RenderObjectToWidgetAdapter<RenderBox>(
-    container: repaintBoundary,
-    child: Directionality(textDirection: TextDirection.ltr, child: widget),
-  ).attachToRenderTree(buildOwner);
-
-  buildOwner.buildScope(rootElement);
-
-  if (wait != null) {
-    await Future<void>.delayed(wait);
-  }
-
-  buildOwner
-    ..buildScope(rootElement)
-    ..finalizeTree();
-
-  pipelineOwner
-    ..flushLayout()
-    ..flushCompositingBits()
-    ..flushPaint();
-
-  final image = await repaintBoundary.toImage(
-    pixelRatio: imageSize.width / logicalSize.width,
-  );
-
-  final byteData = await image.toByteData();
-  sw.stop();
-  print('Took ${sw.elapsedMilliseconds}ms to create image from widget');
-  return byteData?.buffer;
 }
